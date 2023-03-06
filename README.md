@@ -18,5 +18,5 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE.md)
 
 ## Acknowledgments
 
-* [craiyon](https://www.craiyon.com/) for provideing such a powerful AI
+* [craiyon](https://www.craiyon.com/) for providing such a powerful AI
 * [Saafke](https://github.com/Saafke/FSRCNN_Tensorflow) for providing the FSRCNN model

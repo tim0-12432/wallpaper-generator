@@ -4,3 +4,4 @@ venv
 *env
 /models/**
 !/models/.gitkeep
+**log*

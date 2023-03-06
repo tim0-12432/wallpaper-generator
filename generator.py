@@ -20,7 +20,8 @@ class Generator:
 
     def _setup_sr(self, model: str) -> None:
         self.sr = dnn_superres.DnnSuperResImpl_create()
-        self.sr.readModel(f"./models/{model}.pb")
+        path = os.path.join(os.path.dirname(__file__), "models", f"{model}.pb")
+        self.sr.readModel(path)
 
     def _request(self, prompt: str) -> dict:
         data = "{" + f'"prompt": "{prompt}<br>"' + "}"
@@ -90,6 +91,5 @@ if __name__ == "__main__":
     sys.stdout.write("Upscaling image...\n")
     image = generator.upscale(random.choice([*images]), 4)
     sys.stdout.write("Setting wallpaper...\n")
-    image.show()
     generator.set_as_wallpaper(image)
     sys.stdout.write("Done.\n")

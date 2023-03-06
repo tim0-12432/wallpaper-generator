@@ -6,7 +6,11 @@ This is a simple script that lets [craiyon](https://www.craiyon.com/) generate a
 
 Use the generator as a module in your own scripts or run it directly from the command line.
 
-> [Requirements](./requirements.txt): `pip install -r requirements.txt`
+> [Requirements](./requirements.txt): `pip install -r requirements.txt` + download FSRCNN model
+
+## Contributing
+
+All contributions are welcome. Please open an issue or pull request.
 
 ## License
 

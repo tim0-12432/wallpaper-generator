@@ -48,6 +48,20 @@ class Generator:
         up = self.sr.upsample(img, scale)
         return Image.fromarray(cv2.cvtColor(up, cv2.COLOR_BGR2RGB))
 
+    def _clean_dir(self, path: str) -> int:
+        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+        max_number = 0
+        for f in files:
+            max_number = (
+                int(f.split(".")[0].split("_")[1])
+                if int(f.split(".")[0].split("_")[1]) > max_number
+                else max_number
+            )
+        for f in files:
+            if int(f.split(".")[0].split("_")[1]) < max_number:
+                os.remove(os.path.join(path, f))
+        return max_number + 1
+
     def _save_for_wallpaper(self, image: Image) -> str:
         if sys.platform == "cygwin":
             home_dir = os.environ["HOME"]
@@ -57,7 +71,18 @@ class Generator:
             raise Exception("Could not find home directory.")
         if not os.path.exists(os.path.join(os.path.normpath(home_dir), "Pictures")):
             os.mkdir(os.path.join(os.path.normpath(home_dir), "Pictures"))
-        path = os.path.join(os.path.normpath(home_dir), "Pictures", "wallpaper.png")
+        dir_path = os.path.join(
+            os.path.normpath(home_dir), "Pictures", "wallpaper-generator"
+        )
+        if not os.path.exists(dir_path):
+            os.mkdir(dir_path)
+        idx = self._clean_dir(dir_path)
+        path = os.path.join(
+            os.path.normpath(home_dir),
+            "Pictures",
+            "wallpaper-generator",
+            f"wallpaper_{idx}.png",
+        )
         image.save(path)
         return path
 
@@ -66,13 +91,14 @@ class Generator:
             import ctypes
 
             SPI_SETDESKWALLPAPER = 0x14
-            SPIF_UPDATEINIFILE = 0x2
             SPIF_UPDATEINSTANT = 0x3
 
-            ctypes.windll.user32.SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, "", SPIF_UPDATEINSTANT)
+            ctypes.windll.user32.SystemParametersInfoW(
+                SPI_SETDESKWALLPAPER, 0, "", SPIF_UPDATEINSTANT
+            )
             img_path = self._save_for_wallpaper(image)
             ctypes.windll.user32.SystemParametersInfoW(
-                SPI_SETDESKWALLPAPER, 0, img_path, SPIF_UPDATEINIFILE
+                SPI_SETDESKWALLPAPER, 0, img_path, SPIF_UPDATEINSTANT
             )
         else:
             raise Exception("Unsupported platform.")

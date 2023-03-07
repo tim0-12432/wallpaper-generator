@@ -65,9 +65,12 @@ class Generator:
         if sys.platform in ["win32", "cygwin"]:
             import ctypes
 
-            img_path = self._save_for_wallpaper(image)
             SPI_SETDESKWALLPAPER = 0x14
             SPIF_UPDATEINIFILE = 0x2
+            SPIF_UPDATEINSTANT = 0x3
+
+            ctypes.windll.user32.SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, "", SPIF_UPDATEINSTANT)
+            img_path = self._save_for_wallpaper(image)
             ctypes.windll.user32.SystemParametersInfoW(
                 SPI_SETDESKWALLPAPER, 0, img_path, SPIF_UPDATEINIFILE
             )

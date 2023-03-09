@@ -1,6 +1,7 @@
 from typing import Iterator, List
 from cv2 import dnn_superres
 from requests import post
+from ctypes import wintypes
 from io import BytesIO
 from PIL import Image
 import numpy as np
@@ -10,20 +11,106 @@ import sys
 import cv2
 import os
 
+"""
+The wallpaper generator module.
+
+Classes
+-------
+Generator
+    Generator class for generating images from prompts.
+
+Author
+------
+Tim0-12432 (c) 2023
+
+License
+-------
+MIT License 2023
+
+Acknowledgements
+----------------
+Craiyon v2 (https://www.craiyon.com/)
+FSRCNN model (https://github.com/Saafke/FSRCNN_Tensorflow)
+"""
+
 
 class Generator:
+    """
+    Generator class for generating images from prompts.
+
+    Attributes
+    ----------
+    url : str
+        URL of the API.
+    headers : dict
+        Headers for the API request.
+    sr : DnnSuperResImpl
+        Super resolution object.
+
+    Methods
+    -------
+    _setup_sr(model: str)
+        Sets up the super resolution object.
+    _request(prompt: str) -> dict
+        Sends a request to the API.
+    _clean_dir(path: str) -> int
+        Cleans the directory of old images.
+    _save_for_wallpaper(image: Image) -> str
+        Saves the image for the wallpaper.
+    generate(text: str) -> List[Image.Image]
+        Generates images from a prompt.
+    decode(images: List[Image.Image]) -> Iterator[Image.Image]
+        Decodes the images from base64.
+    upscale(image: Image, scale: int) -> Image
+        Upscales the image.
+    set_as_wallpaper(image: Image)
+        Sets the image as the wallpaper.
+    """
+
     def __init__(self) -> None:
+        """
+        Initializes the generator.
+        """
+
         self.url = "https://backend.craiyon.com/generate"
         self.headers = {"Content-Type": "application/json"}
         self._setup_sr("FSRCNN-small_x4")
         sys.stdout.write("Generator initialized.\n")
 
     def _setup_sr(self, model: str) -> None:
+        """
+        Sets up the super resolution object.
+
+        Parameters
+        ----------
+        model : str
+            The model to use.
+        """
+
         self.sr = dnn_superres.DnnSuperResImpl_create()
         path = os.path.join(os.path.dirname(__file__), "models", f"{model}.pb")
         self.sr.readModel(path)
 
     def _request(self, prompt: str) -> dict:
+        """
+        Sends a request to the API.
+
+        Parameters
+        ----------
+        prompt : str
+            The prompt to use.
+
+        Returns
+        -------
+        dict
+            The response from the API.
+
+        Raises
+        ------
+        Exception
+            If the response status code is not 200.
+        """
+
         data = "{" + f'"prompt": "{prompt}<br>"' + "}"
         response = post(self.url, headers=self.headers, data=data)
         if response.status_code == 200:
@@ -32,23 +119,81 @@ class Generator:
             raise Exception(response.text)
 
     def generate(self, text: str) -> List[Image.Image]:
+        """
+        Generates images from a prompt.
+
+        Parameters
+        ----------
+        text : str
+            The prompt to use.
+
+        Returns
+        -------
+        List[Image.Image]
+            The generated images.
+        """
+
         result = self._request(text)
         images = result["images"]
         return images
 
     def decode(self, images: List[Image.Image]) -> Iterator[Image.Image]:
+        """
+        Decodes the images from base64.
+
+        Parameters
+        ----------
+        images : List[Image.Image]
+            The images to decode.
+
+        Yields
+        -------
+        Iterator[Image.Image]
+            The decoded images.
+        """
+
         yield from (
             Image.open(BytesIO(base64.decodebytes(img.encode("utf-8"))))
             for img in images
         )
 
     def upscale(self, image: Image, scale: int) -> Image:
+        """
+        Upscales the image.
+
+        Parameters
+        ----------
+        image : Image
+            The image to upscale.
+        scale : int
+            The scale to use.
+
+        Returns
+        -------
+        Image
+            The upscaled image.
+        """
+
         img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
         self.sr.setModel("fsrcnn", scale)
         up = self.sr.upsample(img, scale)
         return Image.fromarray(cv2.cvtColor(up, cv2.COLOR_BGR2RGB))
 
     def _clean_dir(self, path: str) -> int:
+        """
+        Cleans the directory of old images.
+
+        Parameters
+        ----------
+        path : str
+            The path to the directory.
+
+        Returns
+        -------
+        int
+            The index of the next image.
+        """
+
         files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
         max_number = 0
         for f in files:
@@ -63,6 +208,25 @@ class Generator:
         return max_number + 1
 
     def _save_for_wallpaper(self, image: Image) -> str:
+        """
+        Saves the image for the wallpaper.
+
+        Parameters
+        ----------
+        image : Image
+            The image to save.
+
+        Returns
+        -------
+        str
+            The path to the image.
+
+        Raises
+        ------
+        Exception
+            If the home directory could not be found.
+        """
+
         if sys.platform == "cygwin":
             home_dir = os.environ["HOME"]
         else:
@@ -87,18 +251,48 @@ class Generator:
         return path
 
     def set_as_wallpaper(self, image: Image) -> None:
+        """
+        Sets the image as the wallpaper.
+
+        Parameters
+        ----------
+        image : Image
+            The image to set.
+
+        Raises
+        ------
+        Exception
+            If the platform is not supported.
+        """
+
         if sys.platform in ["win32", "cygwin"]:
             import ctypes
 
-            SPI_SETDESKWALLPAPER = 0x14
-            SPIF_UPDATEINSTANT = 0x3
+            SPI_SET_DESK_WALLPAPER = 0x14
+            SPIF_UPDATE_INI_FILE = 0x1
+            SPIF_SEND_WIN_INI_CHANGE = 0x2
 
-            ctypes.windll.user32.SystemParametersInfoW(
-                SPI_SETDESKWALLPAPER, 0, "", SPIF_UPDATEINSTANT
+            system_params_info = ctypes.windll.user32.SystemParametersInfoW
+            system_params_info.argtypes = (
+                ctypes.c_uint,
+                ctypes.c_uint,
+                ctypes.c_void_p,
+                ctypes.c_uint,
+            )
+            system_params_info.restype = wintypes.BOOL
+
+            system_params_info(
+                SPI_SET_DESK_WALLPAPER,
+                0,
+                "",
+                SPIF_UPDATE_INI_FILE | SPIF_SEND_WIN_INI_CHANGE,
             )
             img_path = self._save_for_wallpaper(image)
-            ctypes.windll.user32.SystemParametersInfoW(
-                SPI_SETDESKWALLPAPER, 0, img_path, SPIF_UPDATEINSTANT
+            system_params_info(
+                SPI_SET_DESK_WALLPAPER,
+                0,
+                img_path,
+                SPIF_UPDATE_INI_FILE | SPIF_SEND_WIN_INI_CHANGE,
             )
         else:
             raise Exception("Unsupported platform.")
@@ -106,10 +300,13 @@ class Generator:
 
 if __name__ == "__main__":
     prompts = [
-        "a starwars character in a psychodelic dream, digital art, sharp edges, realistic, 4k, 85mm, f2.8, star wars",
-        "universe, planets, psychodelic dream, digital art, sharp edges, realistic, 4k, 18mm, f1.4, solar system, milky way",
-        "psychodelic dream, digital art, sharp edges, realistic, 4k, 18mm, f1.4, modern",
-        "abstract, digital art, sharp edges, realistic, 4k, 35mm, f1.4, modern, wall breaking",
+        "a starwars character in a psychodelic dream, atmospheric, digital art, high definition, realistic, 8k, 85mm, f2.8, star wars",
+        "universe, planets, detailed, psychodelic dream, high definition, sharp edges, realistic, 8k, 18mm, f1.4, solar system, milky way",
+        "psychodelic dream, digital art, sharp edges, realistic, high definition, 8k, 18mm, f1.4, modern",
+        "abstract, sharp edges, detailed, realistic, high definition, 8k, 35mm, f1.4, modern, wall breaking",
+        "impressionistic oil painting, by Van Gogh, detailed, high definition, 8k, psychodelic dream, abstract art",
+        "cyberpunk, wired, vibrant high contrast, hyperrealistic, photographic, 8k, 85mm, f2.8, octane render, person, spotlight, cyberpunk city, cyberpunk man",
+        "hacker, dark, atmospheric, digital art, detailed, high definition, 8k, green bytes floating, zero and ones, hoodie, black",
     ]
     generator = Generator()
     prompt = random.choice(prompts)

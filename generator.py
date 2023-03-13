@@ -69,6 +69,8 @@ class Generator:
         Upscales the image.
     set_as_wallpaper(image: Image)
         Sets the image as the wallpaper.
+    resize_to_6_to_4(image: Image) -> Image
+        Resizes the image to 6:4.
     """
 
     def __init__(self) -> None:
@@ -179,10 +181,7 @@ class Generator:
             The decoded images.
         """
 
-        yield from (
-            Image.open(BytesIO(base64.decodebytes(img)))
-            for img in images
-        )
+        yield from (Image.open(BytesIO(base64.decodebytes(img))) for img in images)
 
     def upscale(self, image: Image, scale: int) -> Image:
         """
@@ -324,6 +323,43 @@ class Generator:
         else:
             raise Exception("Unsupported platform.")
 
+    def resize_to_6_to_4(self, image: Image) -> Image:
+        """
+        Resizes the image to 6:4.
+
+        Parameters
+        ----------
+        image : Image
+            The image to resize.
+
+        Returns
+        -------
+        Image
+            The resized image.
+        """
+
+        orig_width, orig_height = image.size
+        if orig_width / orig_height == 6 / 4:
+            return image
+        elif not orig_width / orig_height == 1:
+            image_to_work_with = image.resize((orig_height, orig_height))
+        else:
+            image_to_work_with = image
+
+        width, height = image_to_work_with.size
+        quarter_width = width // 4
+        wip_image = Image.new("RGB", (width + width // 2, height))
+        wip_image.paste(image_to_work_with, (quarter_width, 0))
+
+        left_img = image_to_work_with.crop((0, 0, quarter_width, height))
+        right_img = image_to_work_with.crop((width - quarter_width, 0, width, height))
+        left_img = left_img.transpose(Image.FLIP_LEFT_RIGHT)
+        right_img = right_img.transpose(Image.FLIP_LEFT_RIGHT)
+        wip_image.paste(left_img, (0, 0))
+        wip_image.paste(right_img, (width + quarter_width, 0))
+
+        return wip_image
+
 
 if __name__ == "__main__":
     prompts = [
@@ -343,6 +379,8 @@ if __name__ == "__main__":
     images = generator.decode(images)
     sys.stdout.write("Upscaling image...\n")
     image = generator.upscale(random.choice([*images]), 4)
+    sys.stdout.write("Resizing image...\n")
+    image = generator.resize_to_6_to_4(image)
     sys.stdout.write("Setting wallpaper...\n")
     generator.set_as_wallpaper(image)
     sys.stdout.write("Done.\n")

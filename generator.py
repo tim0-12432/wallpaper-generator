@@ -1,6 +1,6 @@
 from typing import Iterator, List
 from cv2 import dnn_superres
-from requests import post
+from requests import Session, post, get
 from ctypes import wintypes
 from io import BytesIO
 from PIL import Image
@@ -40,19 +40,23 @@ class Generator:
 
     Attributes
     ----------
-    url : str
+    api_url : str
         URL of the API.
+    img_url : str
+        URL of the image directory.
     headers : dict
         Headers for the API request.
     sr : DnnSuperResImpl
         Super resolution object.
+    version : str
+        Version of the API.
 
     Methods
     -------
     _setup_sr(model: str)
         Sets up the super resolution object.
     _request(prompt: str) -> dict
-        Sends a request to the API.
+        Gets the images from the API.
     _clean_dir(path: str) -> int
         Cleans the directory of old images.
     _save_for_wallpaper(image: Image) -> str
@@ -72,8 +76,15 @@ class Generator:
         Initializes the generator.
         """
 
-        self.url = "https://backend.craiyon.com/generate"
-        self.headers = {"Content-Type": "application/json"}
+        self.api_url = "https://api.craiyon.com/draw"
+        self.img_url = "https://img.craiyon.com"
+        self.headers = {
+            "pragma": "no-cache",
+            "cache-control": "no-cache",
+            "origin": "https://www.craiyon.com",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+        }
+        self.version = "35s5hfwn9n78gb06"
         self._setup_sr("FSRCNN-small_x4")
         sys.stdout.write("Generator initialized.\n")
 
@@ -91,7 +102,7 @@ class Generator:
         path = os.path.join(os.path.dirname(__file__), "models", f"{model}.pb")
         self.sr.readModel(path)
 
-    def _request(self, prompt: str) -> dict:
+    def _request(self, prompt: str) -> List[bytes]:
         """
         Sends a request to the API.
 
@@ -102,8 +113,8 @@ class Generator:
 
         Returns
         -------
-        dict
-            The response from the API.
+        List[bytes]
+            The images from the API.
 
         Raises
         ------
@@ -111,10 +122,28 @@ class Generator:
             If the response status code is not 200.
         """
 
-        data = "{" + f'"prompt": "{prompt}<br>"' + "}"
-        response = post(self.url, headers=self.headers, data=data)
+        session = Session()
+        data = {"prompt": prompt, "token": None, "version": self.version}
+        response = session.post(
+            self.api_url,
+            headers={
+                **self.headers,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json=data,
+        )
         if response.status_code == 200:
-            return response.json()
+            images = []
+            for path in response.json()["images"]:
+                img_resp = session.get(
+                    self.img_url + "/" + path, headers={**self.headers, "Accept": "*/*"}
+                )
+                if img_resp.status_code == 200:
+                    images.append(base64.b64encode(img_resp.content))
+                else:
+                    raise Exception(img_resp.text)
+            return images
         else:
             raise Exception(response.text)
 
@@ -133,17 +162,15 @@ class Generator:
             The generated images.
         """
 
-        result = self._request(text)
-        images = result["images"]
-        return images
+        return self._request(text)
 
-    def decode(self, images: List[Image.Image]) -> Iterator[Image.Image]:
+    def decode(self, images: List[bytes]) -> Iterator[Image.Image]:
         """
         Decodes the images from base64.
 
         Parameters
         ----------
-        images : List[Image.Image]
+        images : List[bytes]
             The images to decode.
 
         Yields
@@ -153,7 +180,7 @@ class Generator:
         """
 
         yield from (
-            Image.open(BytesIO(base64.decodebytes(img.encode("utf-8"))))
+            Image.open(BytesIO(base64.decodebytes(img)))
             for img in images
         )
 
@@ -245,7 +272,7 @@ class Generator:
             os.path.normpath(home_dir),
             "Pictures",
             "wallpaper-generator",
-            f"wallpaper_{idx}.png",
+            f"wallpaper_{idx}.jpg",
         )
         image.save(path)
         return path
